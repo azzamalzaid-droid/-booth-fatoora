@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>فواتير البوثات - Booth Fatoora</title>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <style>
+    :root {
+      --bg-color: #121212;
+      --card-bg: #1e1e1e;
+      --primary: #2d5a27;
+      --accent: #8ba888;
+      --text: #ffffff;
+      --text-muted: #aaaaaa;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text);
+      margin: 0;
+      padding: 15px;
+      direction: rtl;
+    }
+
+    .container {
+      max-width: 480px;
+      margin: 0 auto;
+    }
+
+    h1, h2 {
+      text-align: center;
+      color: var(--accent);
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: 12px;
+      padding: 15px;
+      margin-bottom: 15px;
+      border: 1px solid #333;
+    }
+
+    input, button, select {
+      width: 100%;
+      padding: 12px;
+      margin: 6px 0;
+      border-radius: 8px;
+      border: 1px solid #444;
+      background: #2a2a2a;
+      color: #fff;
+      box-sizing: border-box;
+      font-size: 14px;
+    }
+
+    button {
+      background: var(--primary);
+      color: white;
+      font-weight: bold;
+      border: none;
+      cursor: pointer;
+    }
+
+    button:active {
+      opacity: 0.8;
+    }
+
+    #invoice-preview {
+      background: #ffffff;
+      color: #000000;
+      padding: 20px;
+      border-radius: 8px;
+      margin-top: 15px;
+    }
+
+    .invoice-header {
+      text-align: center;
+      border-bottom: 2px dashed #ccc;
+      padding-bottom: 10px;
+    }
+
+    .invoice-item {
+      display: flex;
+      justify-content: space-between;
+      margin: 8px 0;
+    }
+
+    .invoice-total {
+      border-top: 2px dashed #ccc;
+      padding-top: 10px;
+      font-weight: bold;
+      text-align: left;
+    }
+
+    #result-modal {
+      display: none;
+      text-align: center;
+      background: #000000e6;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 20px;
+      z-index: 1000;
+      overflow-y: auto;
+    }
+
+    #generated-img {
+      max-width: 90%;
+      border-radius: 10px;
+      border: 2px solid var(--accent);
+      margin-top: 10px;
+    }
+
+    .hint-text {
+      color: #ffd700;
+      font-size: 14px;
+      margin: 10px 0;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h1>🧾 فواتير البوثات</h1>
+
+    <div class="card">
+      <h3>إضافة منتج جديد</h3>
+      <input type="text" id="prod-name" placeholder="اسم العطر / المنتج">
+      <input type="number" id="prod-price" placeholder="السعر (ر.س)">
+      <button onclick="addProduct()">إضافة للمتجر</button>
+    </div>
+
+    <div class="card">
+      <h3>اختيار المنتجات للفاتورة</h3>
+      <div id="products-list"></div>
+    </div>
+
+    <div class="card">
+      <h3>معاينة الفاتورة</h3>
+
+      <div id="invoice-preview">
+        <div class="invoice-header">
+          <h2 style="color:#2d5a27; margin:0;" id="booth-title">متجر العطور</h2>
+          <small>فاتورة مبيعات بوث</small>
+        </div>
+
+        <div id="invoice-items">
+          <p style="text-align:center; color:#888;">لم يتم إضافة منتجات بعد</p>
+        </div>
+
+        <div class="invoice-total">
+          الإجمالي:
+          <span id="invoice-total-price">0</span>
+          ر.س
+        </div>
+      </div>
+
+      <button onclick="generateImage()" style="margin-top: 15px; background: #3b7a34;">
+        📷 إصدار الفاتورة كصورة
+      </button>
+    </div>
+  </div>
+
+  <div id="result-modal">
+    <button onclick="closeModal()" style="width:auto; background:#c0392b; float:left;">
+      إغلاق ✖
+    </button>
+
+    <h3 style="color:#fff; margin-top:40px;">
+      تم إنشاء الفاتورة بنجاح!
+    </h3>
+
+    <p class="hint-text">
+      💡 اضغط على الصورة مطولاً واختر
+      <b>"حفظ في الصور / Save to Photos"</b>
+    </p>
+
+    <img id="generated-img" alt="الفاتورة">
+  </div>
+
+  <script>
+    let products = JSON.parse(localStorage.getItem('booth_products')) || [];
+    let currentCart = [];
+
+    function saveData() {
+      localStorage.setItem('booth_products', JSON.stringify(products));
+    }
+
+    function addProduct() {
+      const name = document.getElementById('prod-name').value.trim();
+      const price = parseFloat(document.getElementById('prod-price').value);
+
+      if (!name || isNaN(price) || price < 0) {
+        alert('يرجى كتابة اسم المنتج والسعر بشكل صحيح');
+        return;
+      }
+
+      products.push({
+        id: Date.now(),
+        name: name,
+        price: price
+      });
+
+      saveData();
+      renderProducts();
+
+      document.getElementById('prod-name').value = '';
+      document.getElementById('prod-price').value = '';
+    }
+
+    function addToCart(prodId) {
+      const item = products.find(p => p.id === prodId);
+
+      if (item) {
+        currentCart.push(item);
+        renderInvoice();
+      }
+    }
+
+    function renderProducts() {
+      const container = document.getElementById('products-list');
+
+      if (products.length === 0) {
+        container.innerHTML =
+          '<p style="color:#888; text-align:center;">لا توجد منتجات محفوظة</p>';
+        return;
+      }
+
+      container.innerHTML = products.map(p => `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin:5px 0;">
+          <span>${escapeHtml(p.name)} - ${p.price} ر.س</span>
+          <button onclick="addToCart(${p.id})" style="width:auto; padding:5px 10px;">
+            + إضافة
+          </button>
+        </div>
+      `).join('');
+    }
+
+    function renderInvoice() {
+      const container = document.getElementById('invoice-items');
+      let total = 0;
+
+      if (currentCart.length === 0) {
+        container.innerHTML =
+          '<p style="color:#888; text-align:center;">لم يتم إضافة منتجات بعد</p>';
+
+        document.getElementById('invoice-total-price').innerText = '0';
+        return;
+      }
+
+      container.innerHTML = currentCart.map(item => {
+        total += Number(item.price);
+
+        return `
+          <div class="invoice-item">
+            <span>${escapeHtml(item.name)}</span>
+            <span>${item.price} ر.س</span>
+          </div>
+        `;
+      }).join('');
+
+      document.getElementById('invoice-total-price').innerText = total;
+    }
+
+    function generateImage() {
+      const invoiceDiv = document.getElementById('invoice-preview');
+
+      if (typeof html2canvas === 'undefined') {
+        alert('تعذر تحميل مكتبة إصدار الصورة. تأكد من اتصال الإنترنت.');
+        return;
+      }
+
+      html2canvas(invoiceDiv, {
+        scale: 2,
+        backgroundColor: '#ffffff'
+      }).then(canvas => {
+        const imgData = canvas.toDataURL('image/png');
+        document.getElementById('generated-img').src = imgData;
+        document.getElementById('result-modal').style.display = 'block';
+      }).catch(() => {
+        alert('حدث خطأ أثناء إنشاء صورة الفاتورة.');
+      });
+    }
+
+    function closeModal() {
+      document.getElementById('result-modal').style.display = 'none';
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    renderProducts();
+  </script>
+</body>
+</html>
